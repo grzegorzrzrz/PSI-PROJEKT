@@ -1,6 +1,7 @@
 import socket
 import threading
 import os
+import requests
 
 HOST = socket.gethostbyname(socket.gethostname())
 PORT = 5050
@@ -15,34 +16,37 @@ STARTING_SENDING_MESSAGE = "!START"
 
 
 def handle_file_request(conn, addr):
-    client_socket.settimeout(None)
+    conn.settimeout(10)
     print(f"New connection: {addr}")
     try:
-        client_socket.settimeout(10)
         connected = True
         while connected:
             msg_length = conn.recv(HEADER).decode()
             if msg_length:
-                msg_length = int(msg_length)
-                msg = conn.recv(msg_length).decode()
-                if msg == DISCONNECT_MESSAGE:
-                    connected = False
-                else:
-                    parts = msg.split()
-                    try:
-                        file_path = parts[0]
-                        piece_length = int(parts[1])
-                        piece_number = int(parts[2])
-                    except:
-                        print("Invalid message from {addr}")
-                    if os.path.exists(file_path):
-                        send(STARTING_SENDING_MESSAGE, conn)
-                        send_piece(file_path, conn, piece_length, piece_number)
+                try:
+                    msg_length = int(msg_length)
+                    msg = conn.recv(msg_length).decode()
+                    if msg == DISCONNECT_MESSAGE:
+                        connected = False
                     else:
-                        send(NO_FILE_MESSAGE, conn)
-                        #TODO powiedz serwerowi ze nie masz pliku
-
-                print(f"{addr} {msg}")
+                        parts = msg.split()
+                        try:
+                            file_path = parts[0]
+                            piece_length = int(parts[1])
+                            piece_number = int(parts[2])
+                            id = int(parts[3])
+                            if os.path.exists(file_path):
+                                send(STARTING_SENDING_MESSAGE, conn)
+                                send_piece(file_path, conn, piece_length, piece_number)
+                            else:
+                                send(NO_FILE_MESSAGE, conn)
+                                data = {'ip': ADDR, 'id': id}
+                                response = requests.delete("http://localhost:3000/no-file", json=data)
+                        except:
+                            print(f"Invalid message from {addr}")
+                    print(f"{addr} {msg}")
+                except:
+                    print(f"Invalid message from {addr}")
     except socket.error:
         print(f"Waited too long for an answer from {addr}")
     conn.close()
@@ -71,7 +75,6 @@ def send_piece(file_path, conn, piece_length, piece_number):
                 send_binary(data, conn)
                 if len(data) != DATA_SIZE:
                     break
-            print(f"end: {piece_number}")
             send(END_MESSAGE, conn)
 
 
@@ -85,11 +88,6 @@ def waiting_for_file_requests():
         thread = threading.Thread(target=handle_file_request, args=(conn, addr))
         thread.start()
         print(f"Active threads: {threading.active_count()-1}")
-
-
-file_path = 'dowyslania/zdjecie.png'
-host = socket.gethostbyname(socket.gethostname())
-port = 5050
 
 
 print(f"Client starting on {ADDR}")

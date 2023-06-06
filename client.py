@@ -3,7 +3,12 @@ import hashlib
 import os
 import math
 import threading
+import requests
 
+
+HOST = socket.gethostbyname(socket.gethostname())
+PORT = 5050
+ADDR = (HOST, PORT)
 HEADER = 64
 FILE_DATA_SIZE=1024
 
@@ -19,54 +24,58 @@ undownloaded_pieces = []
 successful_addresses = []
 mutex = threading.Lock()
 hashes = []
+file_id = ""
 
 def request_piece(address, piece_length, piece_number):
     global undownloaded_pieces, hashes
     host, port, file_path = address
-    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client.connect((host, port))
-    send(f"{file_path} {piece_length} {piece_number}", client)
-    msg_length = client.recv(HEADER).decode()
     try:
-        msg_length = int(msg_length)
-    except:
-        print(f"Invalid message from client: {host}")
-        return
-    msg = client.recv(msg_length).decode()
-    if msg == NO_FILE_MESSAGE:
-        send(DISCONNECT_MESSAGE, client)
-        print(f"No file on: {host}")
-        global undownloaded_pieces
-        mutex.acquire()
+        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client.connect((host, port))
+        send(f"{file_path} {piece_length} {piece_number} {file_id}", client)
+        msg_length = client.recv(HEADER).decode()
         try:
-            undownloaded_pieces.append(piece_number)
-        finally:
-            mutex.acquire()
-    elif msg == STARTING_SENDING_MESSAGE:
-        print(piece_number)
-        get_chunk(f"p-{piece_number}.piece", client)
-        if calculate_sha256(f"p-{piece_number}.piece") == hashes[piece_number]:
-            print(f"Downloaded p-{piece_number}  from {host}")
+            msg_length = int(msg_length)
+        except:
+            print(f"Invalid message from client: {host}")
+            return
+        msg = client.recv(msg_length).decode()
+        if msg == NO_FILE_MESSAGE:
             send(DISCONNECT_MESSAGE, client)
-            global successful_addresses
-            successful_addresses.append(address)
-            get_piece_number(address, piece_length)
-        else:
-            send(DISCONNECT_MESSAGE, client)
-            print(f"The hash function does not match on p-{piece_number} from {host}")
+            print(f"No file on: {host}")
+            global undownloaded_pieces
             mutex.acquire()
             try:
                 undownloaded_pieces.append(piece_number)
             finally:
                 mutex.acquire()
-    else:
-        mutex.acquire()
-        try:
-                undownloaded_pieces.append(piece_number)
-        finally:
+        elif msg == STARTING_SENDING_MESSAGE:
+            print(piece_number)
+            get_chunk(f"p-{piece_number}.piece", client)
+            if calculate_sha256(f"p-{piece_number}.piece") == hashes[piece_number]:
+                print(f"Downloaded p-{piece_number}  from {host}")
+                send(DISCONNECT_MESSAGE, client)
+                global successful_addresses
+                successful_addresses.append(address)
+                get_piece_number(address, piece_length)
+            else:
+                send(DISCONNECT_MESSAGE, client)
+                print(f"The hash function does not match on p-{piece_number} from {host}")
                 mutex.acquire()
-        print(f"Invalid message from {host}")
-        raise Exception("Invalid message from client")
+                try:
+                    undownloaded_pieces.append(piece_number)
+                finally:
+                    mutex.acquire()
+        else:
+            mutex.acquire()
+            try:
+                    undownloaded_pieces.append(piece_number)
+            finally:
+                    mutex.acquire()
+            print(f"Invalid message from {host}")
+            raise Exception("Invalid message from client")
+    except:
+        print("Cannot connect to client")
 
 
 def get_piece_number(address, piece_length):
@@ -128,14 +137,15 @@ def delete_pieces(pieces_number):
         file_name = f"p-{i}.piece"
         os.remove(file_name)
 
-def download_file(addresses, file_size, piece_length, file_path, hash_list):
-    global undownloaded_pieces, current_piece, number_of_pieces, successful_addresses, hashes
+def download_file(addresses, file_size, piece_length, file_path, hash_list, id):
+    global undownloaded_pieces, current_piece, number_of_pieces, successful_addresses, hashes, file_id
     undownloaded_pieces = []
     successful_addresses = []
     current_piece = 0
     number_of_pieces = math.ceil(file_size/piece_length)
     hashes = hash_list
     threads = []
+    file_id = id
     try:
         for address in addresses:
             thread = threading.Thread(target=get_piece_number, args=(address, piece_length))
@@ -156,10 +166,13 @@ def download_file(addresses, file_size, piece_length, file_path, hash_list):
                 raise Exception("File download failed")
         try:
             merge_to_file(number_of_pieces, file_path)
-        except:
-            print("Pieces merging failed")
+            data = {'ip': ADDR, 'id': id}
+            response = requests.delete("http://localhost:3000/file", json=data)
+        finally:
+            pass
     except:
         print("File download failed")
+        delete_pieces(current_piece)
 
 def calculate_hash_list(file_path, piece_length):
     hash_list = []
@@ -172,12 +185,12 @@ def calculate_hash_list(file_path, piece_length):
 
 
 # Przykład pobrania pliku
-file_path = 'dowyslania/zdjecie.png'
-host = socket.gethostbyname(socket.gethostname())
-port = 5050
+# file_path = 'dowyslania/zdjecie.png'
+# host = socket.gethostbyname(socket.gethostname())
+# port = 5050
 
-file_size = os.path.getsize(file_path)
-piece_length = 65536
-addresses = [('192.168.64.1', 5050, file_path)]
-hash_list = calculate_hash_list(file_path, piece_length)
-download_file(addresses, file_size, piece_length, "zdjecie.png", hash_list)
+# file_size = os.path.getsize(file_path)
+# piece_length = 65536
+# addresses = [('192.168.64.1', 5050, file_path)]
+# hash_list = calculate_hash_list(file_path, piece_length)
+# download_file(addresses, file_size, piece_length, "zdjecie.png", hash_list)
