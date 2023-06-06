@@ -13,33 +13,38 @@ NO_FILE_MESSAGE = "!NOFILE"
 END_MESSAGE ="!END"
 STARTING_SENDING_MESSAGE = "!START"
 
-client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client_socket.bind(ADDR)
 
 def handle_file_request(conn, addr):
+    client_socket.settimeout(None)
     print(f"New connection: {addr}")
-    connected = True
-    while connected:
-        msg_length = conn.recv(HEADER).decode()
-        if msg_length:
-            msg_length = int(msg_length)
-            msg = conn.recv(msg_length).decode()
-            if msg == DISCONNECT_MESSAGE:
-                connected = False
-            else:
-                parts = msg.split()
-                file_path = parts[0]
-                piece_length = int(parts[1])
-                piece_number = int(parts[2])
-                if os.path.exists(file_path):
-                    send(STARTING_SENDING_MESSAGE, conn)
-                    send_piece(file_path, conn, piece_length, piece_number)
+    try:
+        client_socket.settimeout(10)
+        connected = True
+        while connected:
+            msg_length = conn.recv(HEADER).decode()
+            if msg_length:
+                msg_length = int(msg_length)
+                msg = conn.recv(msg_length).decode()
+                if msg == DISCONNECT_MESSAGE:
+                    connected = False
                 else:
-                    send(NO_FILE_MESSAGE, conn)
-                    #TODO powiedz serwerowi ze nie masz pliku
+                    parts = msg.split()
+                    try:
+                        file_path = parts[0]
+                        piece_length = int(parts[1])
+                        piece_number = int(parts[2])
+                    except:
+                        print("Invalid message from {addr}")
+                    if os.path.exists(file_path):
+                        send(STARTING_SENDING_MESSAGE, conn)
+                        send_piece(file_path, conn, piece_length, piece_number)
+                    else:
+                        send(NO_FILE_MESSAGE, conn)
+                        #TODO powiedz serwerowi ze nie masz pliku
 
-            print(f"{addr} {msg}")
-
+                print(f"{addr} {msg}")
+    except socket.error:
+        print(f"Waited too long for an answer from {addr}")
     conn.close()
 
 def send(msg, client):
@@ -68,6 +73,10 @@ def send_piece(file_path, conn, piece_length, piece_number):
                     break
             print(f"end: {piece_number}")
             send(END_MESSAGE, conn)
+
+
+client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+client_socket.bind(ADDR)
 
 def waiting_for_file_requests():
     client_socket.listen()
