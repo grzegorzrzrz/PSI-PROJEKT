@@ -53,7 +53,7 @@ def request_piece(address, piece_length, piece_number):
             try:
                 undownloaded_pieces.append(piece_number)
             finally:
-                mutex.acquire()
+                mutex.release()
         elif msg == STARTING_SENDING_MESSAGE:
             get_chunk(f"p-{piece_number}.piece", client)
             if calculate_sha256(f"p-{piece_number}.piece") == hashes[piece_number]:
@@ -151,9 +151,6 @@ def download_file(addresses, file_size, piece_length, file_path, hash_list, id):
     number_of_pieces = math.ceil(file_size/piece_length)
     hashes = ast.literal_eval(hash_list)
     threads = []
-    a = id
-    print(f"FILE ID: {a}")
-
     try:
         for address in addresses:
             thread = threading.Thread(target=get_piece_number, args=(address, piece_length))
@@ -184,7 +181,7 @@ def download_file(addresses, file_size, piece_length, file_path, hash_list, id):
             pass
     except:
         print("File download failed")
-        delete_pieces(current_piece)
+        delete_pieces(current_piece-1)
 
 def calculate_hash_list(file_path, piece_length):
     hash_list = []
