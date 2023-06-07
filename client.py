@@ -42,6 +42,7 @@ def request_piece(address, piece_length, piece_number):
             msg_length = int(msg_length)
         except:
             print(f"Invalid message from client: {host}")
+            client.close()
             return
         msg = client.recv(msg_length).decode()
         if msg == NO_FILE_MESSAGE:
@@ -60,6 +61,7 @@ def request_piece(address, piece_length, piece_number):
                 send(DISCONNECT_MESSAGE, client)
                 global successful_addresses
                 successful_addresses.append(address)
+                client.close()
                 get_piece_number(address, piece_length)
             else:
                 send(DISCONNECT_MESSAGE, client)
@@ -79,6 +81,7 @@ def request_piece(address, piece_length, piece_number):
             raise Exception("Invalid message from client")
     except:
         print(f"Cannot connect to client {addr}")
+        client.close()
 
 
 def get_piece_number(address, piece_length):
@@ -202,7 +205,6 @@ def add_file(filename, file_path, piece_length,):
   'piece_size': piece_length,
   'hash': str(hashes),
     }
-    print(data)
     sio = socketio.AsyncClient()
 
     @sio.event
