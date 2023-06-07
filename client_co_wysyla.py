@@ -45,6 +45,7 @@ def handle_file_request(conn, addr):
                                 response = requests.patch("http://localhost:3000/seeders", json=data1)
                         except:
                             print(f"Invalid message from {addr}")
+                            break
                     print(f"{addr} {msg}")
                 except:
                     print(f"Invalid message from {addr}")
