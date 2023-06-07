@@ -6,13 +6,14 @@ import threading
 import requests
 import asyncio
 import socketio
+import ast
 
 
 HOST = socket.gethostbyname(socket.gethostname())
-PORT = 5050
+PORT = 5060
 ADDR = (HOST, PORT)
 HEADER = 64
-FILE_DATA_SIZE=1024
+DATA_SIZE=1024
 PIECE_LENGTH= 65536
 
 DISCONNECT_MESSAGE = "!DISCONNECT"
@@ -30,7 +31,8 @@ file_id = ""
 
 def request_piece(address, piece_length, piece_number):
     global undownloaded_pieces, hashes
-    host, port, file_path = address
+    addr, file_path, file_id = address
+    host, port = ast.literal_eval(addr)
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         client.connect((host, port))
@@ -52,7 +54,6 @@ def request_piece(address, piece_length, piece_number):
             finally:
                 mutex.acquire()
         elif msg == STARTING_SENDING_MESSAGE:
-            print(piece_number)
             get_chunk(f"p-{piece_number}.piece", client)
             if calculate_sha256(f"p-{piece_number}.piece") == hashes[piece_number]:
                 print(f"Downloaded p-{piece_number}  from {host}")
@@ -67,17 +68,17 @@ def request_piece(address, piece_length, piece_number):
                 try:
                     undownloaded_pieces.append(piece_number)
                 finally:
-                    mutex.acquire()
+                    mutex.release()
         else:
             mutex.acquire()
             try:
                     undownloaded_pieces.append(piece_number)
             finally:
-                    mutex.acquire()
+                mutex.release()
             print(f"Invalid message from {host}")
             raise Exception("Invalid message from client")
     except:
-        print("Cannot connect to client")
+        print(f"Cannot connect to client {addr}")
 
 
 def get_piece_number(address, piece_length):
@@ -145,9 +146,11 @@ def download_file(addresses, file_size, piece_length, file_path, hash_list, id):
     successful_addresses = []
     current_piece = 0
     number_of_pieces = math.ceil(file_size/piece_length)
-    hashes = hash_list
+    hashes = ast.literal_eval(hash_list)
     threads = []
-    file_id = id
+    a = id
+    print(f"FILE ID: {a}")
+
     try:
         for address in addresses:
             thread = threading.Thread(target=get_piece_number, args=(address, piece_length))
@@ -156,7 +159,6 @@ def download_file(addresses, file_size, piece_length, file_path, hash_list, id):
 
         for thread in threads:
             thread.join()
-
         while undownloaded_pieces:
             piece_number = undownloaded_pieces.pop()
             for address in successful_addresses:
@@ -166,10 +168,15 @@ def download_file(addresses, file_size, piece_length, file_path, hash_list, id):
                     break
             if piece_number in undownloaded_pieces:
                 raise Exception("File download failed")
+
+        if not successful_addresses:
+            raise Exception("File download failed")
+
         try:
-            merge_to_file(number_of_pieces, file_path)
-            data = {'ip': str(ADDR), 'file_id': id, 'path': str(file_path)}
-            response = requests.post("http://localhost:3000/seeders", json=data)
+            if successful_addresses:
+                merge_to_file(number_of_pieces, file_path)
+                data = {'ip': str(ADDR), 'file_id': id, 'path': str(file_path)}
+                response = requests.post("http://localhost:3000/seeders", json=data)
         finally:
             pass
     except:
@@ -195,16 +202,18 @@ def add_file(filename, file_path, piece_length,):
   'piece_size': piece_length,
   'hash': str(hashes),
     }
+    print(data)
     sio = socketio.AsyncClient()
 
     @sio.event
     async def connect():
-        print('connection established')
+        print('Connected to Torrent server')
+        print('Uploading torrent file to server')
         await sio.emit('add-torrent', {'torrent': data, 'seeder': data1})
 
     @sio.event
     async def disconnect():
-        print('disconnected from server')
+        print('Disconnected from  Torrent server')
         await sio.disconnect()
 
     async def myDisconnect(a):
@@ -218,7 +227,7 @@ def add_file(filename, file_path, piece_length,):
     asyncio.run(main())
 
 
-add_file('zdjecie.png', 'dowyslania/zdjecie.png', PIECE_LENGTH)
+#add_file('zdjecie.png', 'dowyslania/zdjecie.png', PIECE_LENGTH)
 
 
 

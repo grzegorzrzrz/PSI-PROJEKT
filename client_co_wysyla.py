@@ -4,10 +4,11 @@ import os
 import requests
 
 HOST = socket.gethostbyname(socket.gethostname())
-PORT = 5050
+PORT = 5060
 ADDR = (HOST, PORT)
 HEADER = 64
 DATA_SIZE=1024
+PIECE_LENGTH= 65536
 
 DISCONNECT_MESSAGE = "!DISCONNECT"
 NO_FILE_MESSAGE = "!NOFILE"
@@ -47,6 +48,7 @@ def handle_file_request(conn, addr):
                     print(f"{addr} {msg}")
                 except:
                     print(f"Invalid message from {addr}")
+                    break
     except socket.error:
         print(f"Waited too long for an answer from {addr}")
     conn.close()
@@ -76,7 +78,6 @@ def send_piece(file_path, conn, piece_length, piece_number):
                 if len(data) != DATA_SIZE:
                     break
             send(END_MESSAGE, conn)
-
 
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 client_socket.bind(ADDR)
