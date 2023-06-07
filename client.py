@@ -11,7 +11,7 @@ PORT = 5050
 ADDR = (HOST, PORT)
 HEADER = 64
 FILE_DATA_SIZE=1024
-
+PIECE_LENGTH= 65536
 
 DISCONNECT_MESSAGE = "!DISCONNECT"
 NO_FILE_MESSAGE = "!NOFILE"
@@ -166,8 +166,8 @@ def download_file(addresses, file_size, piece_length, file_path, hash_list, id):
                 raise Exception("File download failed")
         try:
             merge_to_file(number_of_pieces, file_path)
-            data = {'ip': ADDR, 'id': id}
-            response = requests.delete("http://localhost:3000/file", json=data)
+            data = {'ip': str(ADDR), 'file_id': id, 'path': str(file_path)}
+            response = requests.post("http://localhost:3000/seeders", json=data)
         finally:
             pass
     except:
@@ -182,6 +182,18 @@ def calculate_hash_list(file_path, piece_length):
                 data = file.read(piece_length)
                 hash_list.append(hashlib.sha256(data).hexdigest())
     return hash_list
+
+def add_file(filename, file_path, piece_length,):
+    hashes = calculate_hash_list(file_path, piece_length)
+
+    data1 = {'ip': str(ADDR), 'path': file_path}
+    data = {
+  'file_name': filename,
+  'file_size': os.path.getsize(file_path),
+  'piece_size': piece_length,
+  'hash': str(hashes),
+    }
+
 
 
 # Przykład pobrania pliku

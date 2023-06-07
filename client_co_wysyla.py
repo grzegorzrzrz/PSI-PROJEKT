@@ -40,8 +40,8 @@ def handle_file_request(conn, addr):
                                 send_piece(file_path, conn, piece_length, piece_number)
                             else:
                                 send(NO_FILE_MESSAGE, conn)
-                                data = {'ip': ADDR, 'id': id}
-                                response = requests.delete("http://localhost:3000/no-file", json=data)
+                                data1 = {'ip': str(ADDR), 'file_id': id}
+                                response = requests.patch("http://localhost:3000/seeders", json=data1)
                         except:
                             print(f"Invalid message from {addr}")
                     print(f"{addr} {msg}")
