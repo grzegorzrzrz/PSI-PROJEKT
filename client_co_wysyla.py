@@ -3,7 +3,7 @@ import threading
 import os
 import requests
 
-HOST = socket.gethostbyname(socket.gethostname())
+HOST = #swojeip
 PORT = 5060
 ADDR = (HOST, PORT)
 HEADER = 64
@@ -23,33 +23,32 @@ def handle_file_request(conn, addr):
         connected = True
         while connected:
             msg_length = conn.recv(HEADER).decode()
-            if msg_length:
-                try:
-                    msg_length = int(msg_length)
-                    msg = conn.recv(msg_length).decode()
-                    if msg == DISCONNECT_MESSAGE:
-                        connected = False
-                    else:
-                        parts = msg.split()
-                        try:
-                            file_path = parts[0]
-                            piece_length = int(parts[1])
-                            piece_number = int(parts[2])
-                            id = int(parts[3])
-                            if os.path.exists(file_path):
-                                send(STARTING_SENDING_MESSAGE, conn)
-                                send_piece(file_path, conn, piece_length, piece_number)
-                            else:
-                                send(NO_FILE_MESSAGE, conn)
-                                data1 = {'ip': str(ADDR), 'file_id': id}
-                                response = requests.patch("http://localhost:3000/seeders", json=data1)
-                        except:
-                            print(f"Invalid message from {addr}")
-                            break
-                    print(f"{addr} {msg}")
-                except:
-                    print(f"Invalid message from {addr}")
-                    break
+            try:
+                msg_length = int(msg_length)
+                msg = conn.recv(msg_length).decode()
+                print(f"{addr} {msg}")
+                if msg == DISCONNECT_MESSAGE:
+                    connected = False
+                else:
+                    parts = msg.split()
+                    try:
+                        file_path = parts[0]
+                        piece_length = int(parts[1])
+                        piece_number = int(parts[2])
+                        id = int(parts[3])
+                        if os.path.exists(file_path):
+                            send(STARTING_SENDING_MESSAGE, conn)
+                            send_piece(file_path, conn, piece_length, piece_number)
+                        else:
+                            send(NO_FILE_MESSAGE, conn)
+                            data1 = {'ip': str(ADDR), 'file_id': id}
+                            response = requests.patch("http://localhost:3000/seeders", json=data1)
+                    except:
+                        print(f"Invalid message from {addr}")
+                        break
+            except:
+                print(f"Invalid message from {addr}")
+                break
     except socket.error:
         print(f"Waited too long for an answer from {addr}")
     conn.close()

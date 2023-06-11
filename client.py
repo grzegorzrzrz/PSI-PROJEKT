@@ -9,7 +9,7 @@ import socketio
 import ast
 
 
-HOST = socket.gethostbyname(socket.gethostname())
+HOST = #swojeip
 PORT = 5060
 ADDR = (HOST, PORT)
 HEADER = 64
@@ -29,62 +29,70 @@ mutex = threading.Lock()
 hashes = []
 file_id = ""
 
-def request_piece(address, piece_length, piece_number):
+def request_piece(address, piece_length):
     global undownloaded_pieces, hashes
     addr, file_path, file_id = address
     host, port = ast.literal_eval(addr)
-    try:
-        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        client.connect((host, port))
-        send(f"{file_path} {piece_length} {piece_number} {file_id}", client)
-        msg_length = client.recv(HEADER).decode()
+    piece_number = get_piece_number()
+    if piece_number > -1:
         try:
-            msg_length = int(msg_length)
-        except:
-            print(f"Invalid message from client: {host}")
-            client.close()
-            return
-        msg = client.recv(msg_length).decode()
-        if msg == NO_FILE_MESSAGE:
-            send(DISCONNECT_MESSAGE, client)
-            print(f"No file on: {host}")
-            global undownloaded_pieces
-            mutex.acquire()
-            try:
-                undownloaded_pieces.append(piece_number)
-            finally:
-                mutex.release()
-        elif msg == STARTING_SENDING_MESSAGE:
-            get_chunk(f"p-{piece_number}.piece", client)
-            if calculate_sha256(f"p-{piece_number}.piece") == hashes[piece_number]:
-                print(f"Downloaded p-{piece_number}  from {host}")
-                send(DISCONNECT_MESSAGE, client)
-                global successful_addresses
-                successful_addresses.append(address)
-                client.close()
-                get_piece_number(address, piece_length)
-            else:
-                send(DISCONNECT_MESSAGE, client)
-                print(f"The hash function does not match on p-{piece_number} from {host}")
-                mutex.acquire()
+            client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            client.connect((host, port))
+            connected = True
+            while connected:
+                send(f"{file_path} {piece_length} {piece_number} {file_id}", client)
+                msg_length = client.recv(HEADER).decode()
                 try:
-                    undownloaded_pieces.append(piece_number)
-                finally:
-                    mutex.release()
-        else:
-            mutex.acquire()
-            try:
-                    undownloaded_pieces.append(piece_number)
-            finally:
-                mutex.release()
-            print(f"Invalid message from {host}")
-            raise Exception("Invalid message from client")
-    except:
-        print(f"Cannot connect to client {addr}")
-        client.close()
+                    msg_length = int(msg_length)
+                except:
+                    print(f"Invalid message from client: {host}")
+                    client.close()
+                    break
+                msg = client.recv(msg_length).decode()
+                if msg == NO_FILE_MESSAGE:
+                    send(DISCONNECT_MESSAGE, client)
+                    print(f"No file on: {host}")
+                    global undownloaded_pieces
+                    mutex.acquire()
+                    try:
+                        undownloaded_pieces.append(piece_number)
+                    finally:
+                        mutex.release()
+                    connected = False
+                elif msg == STARTING_SENDING_MESSAGE:
+                    get_chunk(f"p-{piece_number}.piece", client)
+                    if calculate_sha256(f"p-{piece_number}.piece") == hashes[piece_number]:
+                        print(f"Downloaded p-{piece_number}  from {host}")
+                        global successful_addresses
+                        successful_addresses.append(address)
+                        piece_number = get_piece_number()
+                        if piece_number == -1:
+                            send(DISCONNECT_MESSAGE, client)
+                            client.close()
+                            connected = False
+                    else:
+                        send(DISCONNECT_MESSAGE, client)
+                        connected = False
+                        print(f"The hash function does not match on p-{piece_number} from {host}")
+                        mutex.acquire()
+                        try:
+                            undownloaded_pieces.append(piece_number)
+                        finally:
+                            mutex.release()
+                else:
+                    mutex.acquire()
+                    try:
+                            undownloaded_pieces.append(piece_number)
+                    finally:
+                        mutex.release()
+                    print(f"Invalid message from {host}")
+                    raise Exception("Invalid message from client")
+        except:
+            print(f"Cannot connect to client {addr}")
+            client.close()
 
 
-def get_piece_number(address, piece_length):
+def get_piece_number():
     global undownloaded_pieces, current_piece, number_of_pieces
     mutex.acquire()
     piece_number = -1
@@ -96,8 +104,7 @@ def get_piece_number(address, piece_length):
             current_piece += 1
     finally:
         mutex.release()
-        if piece_number > -1:
-            request_piece(address, piece_length, piece_number)
+        return piece_number
 
 
 def get_chunk(piece_name, client):
@@ -136,6 +143,7 @@ def merge_to_file(pieces_number, output_file):
             file_name = f"p-{i}.piece"
             with open(file_name, 'rb') as file:
                 output.write(file.read())
+                file.close()
     delete_pieces(pieces_number)
 
 def delete_pieces(pieces_number):
@@ -153,35 +161,27 @@ def download_file(addresses, file_size, piece_length, file_path, hash_list, id):
     threads = []
     try:
         for address in addresses:
-            thread = threading.Thread(target=get_piece_number, args=(address, piece_length))
+            thread = threading.Thread(target=request_piece, args=(address, piece_length))
             thread.start()
             threads.append(thread)
 
         for thread in threads:
             thread.join()
-        while undownloaded_pieces:
-            piece_number = undownloaded_pieces.pop()
-            for address in successful_addresses:
-                hash = hashes[piece_number]
-                request_piece(address, piece_length, piece_number, hash)
-                if piece_number not in undownloaded_pieces:
-                    break
-            if piece_number in undownloaded_pieces:
-                raise Exception("File download failed")
-
-        if not successful_addresses:
-            raise Exception("File download failed")
 
         try:
             if successful_addresses:
+                print("Succesfully downloaded a file")
                 merge_to_file(number_of_pieces, file_path)
                 data = {'ip': str(ADDR), 'file_id': id, 'path': str(file_path)}
+                print("Adding myself to seeders")
                 response = requests.post("http://localhost:3000/seeders", json=data)
+            else:
+                raise Exception("File download failed")
         finally:
             pass
     except:
         print("File download failed")
-        delete_pieces(current_piece-1)
+        delete_pieces(current_piece)
 
 def calculate_hash_list(file_path, piece_length):
     hash_list = []
